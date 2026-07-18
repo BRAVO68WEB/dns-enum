@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ns-reader",
+  "main": "./dist/index.js",
+  "compatibility_date": "2026-07-18",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "assets": {
+    "directory": "./dist"
+  },
+  // Required secrets — set via `wrangler secret put <NAME>`:
+  //   GITHUB_CLIENT_ID     — GitHub OAuth App client ID
+  //   GITHUB_CLIENT_SECRET — GitHub OAuth App client secret
+  //   JWT_SECRET           — signing key for session JWTs (random 32+ bytes)
+  "kv_namespaces": [
+    {
+      "binding": "CACHE_KV",
+      "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "preview_id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+  ]
+}
