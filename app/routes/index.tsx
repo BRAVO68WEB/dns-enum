@@ -1,6 +1,18 @@
 import { createRoute } from 'honox/factory'
+import { getCookie, setCookie } from 'hono/cookie'
+import { nanoid } from '../lib/nanoid'
 
 export default createRoute((c) => {
+  if (!getCookie(c, 'visitor_id')) {
+    setCookie(c, 'visitor_id', nanoid(16), {
+      path: '/',
+      httpOnly: true,
+      secure: true,
+      sameSite: 'Lax',
+      maxAge: 86400 * 30,
+    })
+  }
+
   return c.render(
     <div class="min-h-screen bg-gray-950 text-white relative overflow-hidden">
       <canvas id="letter-glitch" class="absolute inset-0 w-full h-full opacity-60"></canvas>

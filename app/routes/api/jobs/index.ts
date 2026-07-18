@@ -6,13 +6,36 @@ import { setJob, getCachedResult, cacheResult, getJob, type JobState } from '../
 import { nanoid } from '../../../lib/nanoid'
 
 const ANON_CACHED_LIMIT = 2
+const VISITOR_COOKIE = 'visitor_id'
+const SEARCH_COOKIE = 'search_count'
 
-async function isAuthenticated(c: any): Promise<boolean> {
+function getVisitorId(c: any): string | null {
+  return getCookie(c, VISITOR_COOKIE) || null
+}
+
+function getSearchCount(c: any): number {
+  return parseInt(getCookie(c, SEARCH_COOKIE) || '0', 10)
+}
+
+function incrementSearchCount(c: any): void {
+  const count = getSearchCount(c) + 1
+  setCookie(c, SEARCH_COOKIE, String(count), {
+    path: '/',
+    httpOnly: true,
+    secure: true,
+    sameSite: 'Lax',
+    maxAge: 86400 * 30,
+  })
+}
+
+function isAuthenticated(c: any): boolean {
   const token = getCookie(c, 'session')
   if (!token) return false
   try {
-    await verify(token, c.env.JWT_SECRET, 'HS256')
-    return true
+    const parts = token.split('.')
+    if (parts.length !== 3) return false
+    const payload = JSON.parse(atob(parts[1]))
+    return !!payload.sub
   } catch {
     return false
   }
@@ -27,31 +50,50 @@ export const POST = createRoute(async (c) => {
     return c.json({ error: 'Invalid domain format' }, 400)
   }
 
-  const authed = await isAuthenticated(c)
+  const visitorId = getVisitorId(c)
+  if (!visitorId) {
+    return c.json({ error: 'invalid_request', message: 'Visit the website first to get a session' }, 400)
+  }
 
+  const authed = isAuthenticated(c)
+  const searchCount = getSearchCount(c)
+
+  // Cached result path
   if (!force) {
     const cached = await getCachedResult(c.env.CACHE_KV, domain)
     if (cached) {
-      if (!authed) {
-        const searchCount = parseInt(getCookie(c, 'search_count') || '0', 10)
-        if (searchCount >= ANON_CACHED_LIMIT) {
-          return c.json({ error: 'auth_required', message: 'Sign in to search more domains' }, 401)
-        }
-        setCookie(c, 'search_count', String(searchCount + 1), {
-          path: '/',
-          httpOnly: true,
-          secure: true,
-          sameSite: 'Lax',
-          maxAge: 86400,
-        })
+      if (!authed && searchCount >= ANON_CACHED_LIMIT) {
+        return c.json({
+          error: 'auth_required',
+          message: 'Sign in to search more domains',
+          visitorId,
+          searchCount,
+        }, 401)
       }
-      return c.json({ id: `cached-${domain}`, domain, status: 'complete', result: cached, fromCache: true })
+      incrementSearchCount(c)
+      return c.json({
+        id: `cached-${domain}`,
+        domain,
+        status: 'complete',
+        result: cached,
+        fromCache: true,
+        searchCount: searchCount + 1,
+      })
     }
   }
 
+  // New search always requires auth
   if (!authed) {
-    return c.json({ error: 'auth_required', message: 'Sign in to search new domains' }, 401)
+    return c.json({
+      error: 'auth_required',
+      message: 'Sign in to search new domains',
+      visitorId,
+      searchCount,
+    }, 401)
   }
+
+  // Authenticated user creating new job
+  incrementSearchCount(c)
 
   const job: JobState = {
     id: nanoid(12),

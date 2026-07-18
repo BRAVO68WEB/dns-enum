@@ -70,7 +70,7 @@
 ### ⚡ Performance
 - ☁️ **KV caching** for instant results
 - 🔄 **Async job queue** with background processing
-- 📊 **Rate limiting** (2 free, auth for more)
+- 📊 **Rate limiting** (2 free cached, auth for new searches)
 
 </td>
 </tr>
@@ -124,12 +124,16 @@ pnpm dev
 ### 🔍 Query Domain
 
 ```bash
-# Create async job
+# First visit to get session cookie
+curl -c cookies.txt http://localhost:5173/
+
+# Create async job (requires visitor_id cookie)
 curl -X POST http://localhost:5173/api/jobs \
   -H "Content-Type: application/json" \
+  -b cookies.txt \
   -d '{"domain": "example.com"}'
 
-# Response: {"id": "abc123", "domain": "example.com", "status": "pending"}
+# Response: {"error": "auth_required", "message": "Sign in to search new domains"}
 ```
 
 ### 📊 Poll Job Status
@@ -162,14 +166,24 @@ curl -X POST http://localhost:5173/api/jobs \
   -d '{"domain": "example.com", "force": true}'
 ```
 
+### 🔒 Auth Flow
+
+| Scenario | Requirement |
+|----------|-------------|
+| Visit landing page | Sets `visitor_id` cookie |
+| First 2 cached searches | Free (no auth) |
+| 3rd+ cached search | Requires GitHub OAuth |
+| New domain search | Requires GitHub OAuth |
+| Force refresh | Requires GitHub OAuth |
+
 ### 📋 All Endpoints
 
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
-| `GET` | `/` | 🏠 Landing page | ❌ |
+| `GET` | `/` | 🏠 Landing page | ❌ Sets visitor_id |
 | `GET` | `/results?domain=` | 📊 Results with polling | ❌ |
-| `POST` | `/api/jobs` | ➕ Create DNS job | ⚠️ Cached only |
-| `GET` | `/api/jobs/:id` | 📈 Poll job status | ❌ |
+| `POST` | `/api/jobs` | ➕ Create DNS job | ⚠️ visitor_id required |
+| `GET` | `/api/jobs/:id` | 📈 Poll job status | ⚠️ visitor_id required |
 | `GET` | `/auth/github` | 🔑 OAuth redirect | ❌ |
 | `GET` | `/auth/github/callback` | 🔄 OAuth callback | ❌ |
 | `GET` | `/auth/logout` | 🚪 Clear session | ❌ |
